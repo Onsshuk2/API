@@ -1,6 +1,7 @@
 ﻿using Microsoft.AspNetCore.Identity;
 using pd311_web_api.BLL.DTOs.Account;
 using pd311_web_api.BLL.Services.Email;
+using System.Text;
 using static pd311_web_api.DAL.Entities.IdentityEntities;
 
 namespace pd311_web_api.BLL.Services.Account
@@ -18,11 +19,45 @@ namespace pd311_web_api.BLL.Services.Account
 
         public async Task<bool> ConfirmEmailAsync(string id, string token)
         {
+            // Шукаємо користувача за його ID
             var user = await _userManager.FindByIdAsync(id);
+
+            // Якщо користувач не знайдений, повертаємо false
             if (user == null) return false;
 
+            // Підтверджуємо email за допомогою токену
             var result = await _userManager.ConfirmEmailAsync(user, token);
+
+            // Повертаємо результат підтвердження 
             return result.Succeeded;
+        }
+
+        public async Task<bool> SendConfirmEmailTokenAsync(string userId)
+        {
+            try
+            {
+                var user = await _userManager.FindByIdAsync(userId);
+
+                if (user == null)
+                {
+                    return false;
+                }
+
+                // Sent mail
+                var token = await _userManager.GenerateEmailConfirmationTokenAsync(user);
+                var bytes = Encoding.UTF8.GetBytes(token);
+                var base64 = Convert.ToBase64String(bytes);
+
+                var body = $"<a href='https://localhost:7223/api/account/confirmEmail?id={user.Id}&t={base64}'>Підтвердити пошту</a>";
+
+                await _emailService.SendMailAsync(user.Email!, "Email confirm", body, true);
+
+                return true;
+            }
+            catch (Exception)
+            {
+                return false;
+            }
         }
 
         public async Task<AppUser?> LoginAsync(LoginDto dto)
