@@ -24,7 +24,7 @@ namespace pd311_web_api.DAL.Entities
         [ForeignKey("Manufacture")]
         public string? ManufactureId { get; set; }
         public Manufacture? Manufacture { get; set; }
-
+        public string? Transmission { get; set; }
         public ICollection<CarImage> Images { get; set; } = [];
     }
 }

@@ -1,7 +1,6 @@
 ﻿using AutoMapper;
 using Microsoft.EntityFrameworkCore;
 using pd311_web_api.BLL.DTOs.Car;
-using pd311_web_api.BLL.Services.Image;
 using pd311_web_api.DAL.Entities;
 using pd311_web_api.DAL.Repositories.Cars;
 using pd311_web_api.DAL.Repositories.Manufactures;
@@ -11,110 +10,108 @@ namespace pd311_web_api.BLL.Services.Cars
     public class CarService : ICarService
     {
         private readonly ICarRepository _carRepository;
-        private readonly IManufactureRepository _manufactureRepository;
-        private readonly IImageService _imageService;
         private readonly IMapper _mapper;
+        private readonly DbContext _context;
 
-        public CarService(ICarRepository carRepository, IMapper mapper, IManufactureRepository manufactureRepository, IImageService imageService)
+        public CarService(ICarRepository carRepository, IMapper mapper)
         {
             _carRepository = carRepository;
             _mapper = mapper;
-            _manufactureRepository = manufactureRepository;
-            _imageService = imageService;
+        }
+       
+
+        public async Task AddAsync(Car car)
+        {
+            await _context.Set<Car>().AddAsync(car);
+            await _context.SaveChangesAsync();
         }
 
-        public async Task<ServiceResponse> CreateAsync(CreateCarDto dto)
+        private async Task<ServiceResponse> GetPaginatedCars(IQueryable<Car> query, int page, int pageSize)
         {
-            var entity = _mapper.Map<Car>(dto);
+            var totalRecords = await query.CountAsync();
+            var cars = await query.Skip((page - 1) * pageSize).Take(pageSize).ToListAsync();
+            var dtos = _mapper.Map<List<CarDto>>(cars);
 
-            if (!string.IsNullOrEmpty(dto.Manufacture))
-            {
-                entity.Manufacture = await _manufactureRepository
-                    .GetByNameAsync(dto.Manufacture);
-            }
+            return new ServiceResponse("Автомобілі отримано", true, new { TotalRecords = totalRecords, Cars = dtos });
+        }
 
-            if (dto.Images.Count() > 0)
-            {
-                string imagesPath = Path.Combine(Settings.CarsImagesPath, entity.Id.ToString()); // .ToString()
-                _imageService.CreateImagesDirectory(imagesPath);
-                var images = await _imageService.SaveCarImagesAsync(dto.Images, imagesPath);
-                entity.Images = images;
-            }
+        public async Task<ServiceResponse> GetByManufacturerAsync(string manufacturer, int page, int pageSize)
+        {
+            var query = _carRepository.GetAll().Where(c => c.Manufacture.Name == manufacturer);
+            return await GetPaginatedCars(query, page, pageSize);
+        }
 
+        public async Task<ServiceResponse> GetByYearAsync(int year, int page, int pageSize)
+        {
+            var query = _carRepository.GetAll().Where(c => c.Year == year);
+            return await GetPaginatedCars(query, page, pageSize);
+        }
 
-            var result = await _carRepository.CreateAsync(entity);
+        public async Task<ServiceResponse> GetByTransmissionAsync(string transmission, int page, int pageSize)
+        {
+            var query = _carRepository.GetAll().Where(c => c.Transmission == transmission);
+            return await GetPaginatedCars(query, page, pageSize);
+        }
 
-            if(!result)
-            {
-                return new ServiceResponse("Не вдалося зберегти автомобіль");
-            }
+        public async Task<ServiceResponse> GetByColorAsync(string color, int page, int pageSize)
+        {
+            var query = _carRepository.GetAll().Where(c => c.Color == color);
+            return await GetPaginatedCars(query, page, pageSize);
+        }
 
-            return new ServiceResponse($"Автомобіль '{entity.Brand} {entity.Model}' збережено", true);
+        public async Task<ServiceResponse> SearchByModelAsync(string searchTerm, int page, int pageSize)
+        {
+            var query = _carRepository.GetAll().Where(c => c.Model.Contains(searchTerm));
+            return await GetPaginatedCars(query, page, pageSize);
+        }
+        public async Task<ServiceResponse> CreateAsync(CreateCarDto carDto)
+        {
+            var car = _mapper.Map<Car>(carDto);
+            await _carRepository.AddAsync(car);
+            return new ServiceResponse("Автомобіль створено", true);
         }
 
         public async Task<ServiceResponse> DeleteAsync(string id)
         {
-            var entity = await _carRepository
-                .GetAll()
-                .Include(e => e.Images)
-                .FirstOrDefaultAsync(e => e.Id == id);
-
-            if (entity == null)
+            var car = await _carRepository.GetByIdAsync(id);
+            if (car == null)
             {
-                return new ServiceResponse("Автомобіль не знайдено");
+                return new ServiceResponse("Автомобіль не знайдений", false);
             }
-
-            // Видалення зображень автомобіля
-            if (entity.Images != null && entity.Images.Any())
-            {
-                _imageService.DeleteCarImages(entity.Images);
-            }
-
-            var result = await _carRepository.DeleteAsync(entity);
-
-            if (!result)
-            {
-                return new ServiceResponse("Не вдалося видалити автомобіль");
-            }
-
-            return new ServiceResponse($"Автомобіль '{entity.Brand} {entity.Model}' видалено", true);
+            await _carRepository.DeleteAsync(car);
+            return new ServiceResponse("Автомобіль видалено", true);
         }
-
-
-
 
         public async Task<ServiceResponse> GetAllAsync()
         {
-            var entities = await _carRepository
-                .GetAll()
-                .Include(e => e.Manufacture)
-                .Include(e => e.Images)
-                .ToListAsync();
-
-            var dtos = _mapper.Map<List<CarDto>>(entities);
-
+            var cars = await _carRepository.GetAll().ToListAsync();
+            var dtos = _mapper.Map<List<CarDto>>(cars);
             return new ServiceResponse("Автомобілі отримано", true, dtos);
         }
+
         public async Task<ServiceResponse> GetByIdAsync(string id)
         {
-            var entity = await _carRepository
-                .GetAll()
-                .Include(e => e.Manufacture)
-                .Include(e => e.Images)
-                .FirstOrDefaultAsync(e => e.Id == id);
-
-            if (entity == null)
+            var car = await _carRepository.GetByIdAsync(id);
+            if (car == null)
             {
-                return new ServiceResponse("Автомобіль не знайдено");
+                return new ServiceResponse("Автомобіль не знайдений", false);
             }
-
-            var dto = _mapper.Map<CarDto>(entity);
-            return new ServiceResponse("Автомобіль знайдений", true, dto);
+            var dto = _mapper.Map<CarDto>(car);
+            return new ServiceResponse("Автомобіль отримано", true, dto);
         }
 
-        public Task<ServiceResponse> UpdateAsync(string id, CreateCarDto dto)
+        public async Task<ServiceResponse> UpdateAsync(string id, CreateCarDto carDto)
         {
-            throw new NotImplementedException();
+            var car = await _carRepository.GetByIdAsync(id);
+            if (car == null)
+            {
+                return new ServiceResponse("Автомобіль не знайдений", false);
+            }
+            _mapper.Map(carDto, car);
+            await _carRepository.UpdateAsync(car);
+            return new ServiceResponse("Автомобіль оновлено", true);
         }
+
+        
     }
 }

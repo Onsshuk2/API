@@ -3,16 +3,30 @@ using pd311_web_api.DAL.Entities;
 
 namespace pd311_web_api.DAL.Repositories
 {
-    public class GenericRepository<TEntity, TId>
-        : IGenericRepository<TEntity, TId>
+    public class GenericRepository<TEntity, TId> : IGenericRepository<TEntity, TId>
         where TEntity : class, IBaseEntity<TId>
         where TId : notnull
     {
-        private readonly AppDbContext _context;
+        protected readonly AppDbContext _context;
 
         public GenericRepository(AppDbContext context)
         {
             _context = context;
+        }
+
+        // AddAsync method (similar to what you're trying to implement in CarRepository)
+        public async Task<bool> AddAsync(TEntity entity)
+        {
+            try
+            {
+                await _context.Set<TEntity>().AddAsync(entity);
+                var result = await _context.SaveChangesAsync();
+                return result != 0;
+            }
+            catch (Exception)
+            {
+                return false;
+            }
         }
 
         public async Task<bool> CreateAsync(TEntity entity)
@@ -53,7 +67,7 @@ namespace pd311_web_api.DAL.Repositories
             try
             {
                 var entity = await _context.Set<TEntity>()
-                .FirstOrDefaultAsync(e => e.Equals(id));
+                .FirstOrDefaultAsync(e => EF.Property<TId>(e, "Id").Equals(id));
                 return entity;
             }
             catch (Exception)
