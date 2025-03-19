@@ -26,18 +26,30 @@ namespace pd311_web_api.BLL.Services.Email
 
         public async Task SendMailAsync(string to, string subject, string body, bool isHtml = false)
         {
-            var message = new MailMessage();
-            message.From = new MailAddress(email);
-            message.To.Add(to);
-            message.Subject = subject;
-            message.Body = body;
+            using var message = new MailMessage(email, to, subject, body);
             message.IsBodyHtml = isHtml;
             await SendMailAsync(message);
         }
 
         public async Task SendMailAsync(MailMessage message)
         {
-            await _smtpClient.SendMailAsync(message);
+            using var smtpClient = new SmtpClient(host, port)
+            {
+                EnableSsl = true,
+                Credentials = new NetworkCredential(email, password)
+            };
+
+            try
+            {
+                await smtpClient.SendMailAsync(message);
+            }
+            catch (Exception ex)
+            {
+               
+                Console.WriteLine($"Помилка при відправці email: {ex.Message}");
+                throw;
+            }
         }
+
     }
 }
